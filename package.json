@@ -8,18 +8,19 @@
     "pcsclite",
     "smartcards"
   ],
-  "homepage": "https://github.com/pokusew/node-pcsclite#readme",
+  "homepage": "https://github.com/ap-mitch/node-pcsclite#readme",
   "bugs": {
-    "url": "https://github.com/pokusew/node-pcsclite/issues"
+    "url": "https://github.com/ap-mitch/node-pcsclite/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pokusew/node-pcsclite.git"
+    "url": "git+https://github.com/ap-mitch/node-pcsclite.git"
   },
   "license": "ISC",
   "author": "Santiago Gimeno <santiago.gimeno@gmail.com> (https://github.com/santigimeno)",
   "contributors": [
-    "Martin Endler (https://github.com/pokusew)"
+    "Martin Endler (https://github.com/pokusew)",
+    "Mitch McCaffrey (https://github.com/ap-mitch)"
   ],
   "main": "lib/pcsclite.js",
   "types": "index.d.ts",
