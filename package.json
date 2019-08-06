@@ -33,6 +33,7 @@
     "test": "mocha"
   },
   "dependencies": {
+    "@types/node": "^12.6.9",
     "bindings": "^1.4.0",
     "nan": "^2.12.1"
   },
