@@ -1,3 +1,5 @@
+#include <iostream>
+
 #include "cardreader.h"
 #include "common.h"
 
@@ -21,6 +23,7 @@ void CardReader::init(Local<Object> target) {
     Nan::SetPrototypeTemplate(tpl, "get_status", Nan::New<FunctionTemplate>(GetStatus));
     Nan::SetPrototypeTemplate(tpl, "_connect", Nan::New<FunctionTemplate>(Connect));
     Nan::SetPrototypeTemplate(tpl, "_disconnect", Nan::New<FunctionTemplate>(Disconnect));
+    Nan::SetPrototypeTemplate(tpl, "_getAttrib", Nan::New<FunctionTemplate>(GetAttrib));
     Nan::SetPrototypeTemplate(tpl, "_transmit", Nan::New<FunctionTemplate>(Transmit));
     Nan::SetPrototypeTemplate(tpl, "_control", Nan::New<FunctionTemplate>(Control));
     Nan::SetPrototypeTemplate(tpl, "close", Nan::New<FunctionTemplate>(Close));
@@ -57,6 +60,9 @@ void CardReader::init(Local<Object> target) {
     Nan::SetPrototypeTemplate(tpl, "SCARD_RESET_CARD", Nan::New(SCARD_RESET_CARD));
     Nan::SetPrototypeTemplate(tpl, "SCARD_UNPOWER_CARD", Nan::New(SCARD_UNPOWER_CARD));
     Nan::SetPrototypeTemplate(tpl, "SCARD_EJECT_CARD", Nan::New(SCARD_EJECT_CARD));
+
+    // Attributes
+    Nan::SetPrototypeTemplate(tpl, "SCARD_ATTR_CHANNEL_ID", Nan::New(SCARD_ATTR_VALUE(2, 0x0110)));
 
     Local <Context> context = Nan::GetCurrentContext();
 
@@ -194,8 +200,39 @@ NAN_METHOD(CardReader::Disconnect) {
                                DoDisconnect,
                                reinterpret_cast<uv_after_work_cb>(AfterDisconnect));
     assert(status == 0);
+}
 
+NAN_METHOD(CardReader::GetAttrib) {
 
+    Nan::HandleScope scope;
+
+    if (!info[0]->IsUint32()) {
+        return Nan::ThrowError("First argument must be an integer");
+    }
+
+    if (!info[1]->IsFunction()) {
+        return Nan::ThrowError("Second argument must be a callback function");
+    }
+
+    Local<Context> context = Nan::GetCurrentContext();
+
+    DWORD attrId = info[0]->Uint32Value(context).FromJust();
+    Local<Function> cb = Local<Function>::Cast(info[1]);
+
+    std::cout << "Requesting attribute " << attrId << std::endl;
+
+    Baton* baton = new Baton();
+    baton->input = reinterpret_cast<void*>(new DWORD(attrId));
+    baton->request.data = baton;
+    baton->callback.Reset(cb);
+    baton->reader = Nan::ObjectWrap::Unwrap<CardReader>(info.This());
+
+    int status = uv_queue_work(uv_default_loop(),
+                               &baton->request,
+                               DoGetAttrib,
+                               reinterpret_cast<uv_after_work_cb>(AfterGetAttrib));
+
+    assert(status == 0);
 }
 
 NAN_METHOD(CardReader::Transmit) {
@@ -280,7 +317,7 @@ NAN_METHOD(CardReader::Control) {
         return Nan::ThrowError("Fourth argument must be a callback function");
     }
 
-	Local<Context> context = Nan::GetCurrentContext();
+    Local<Context> context = Nan::GetCurrentContext();
 
     Local<Object> in_buf = Nan::To<Object>(info[0]).ToLocalChecked();
     DWORD control_code = info[1]->Uint32Value(context).FromJust();
@@ -556,6 +593,70 @@ void CardReader::AfterDisconnect(uv_work_t* req, int status) {
     baton->callback.Reset();
     DWORD* disposition = reinterpret_cast<DWORD*>(baton->input);
     delete disposition;
+    delete result;
+    delete baton;
+}
+
+void CardReader::DoGetAttrib(uv_work_t* req) {
+
+    Baton* baton = static_cast<Baton*>(req->data);
+    DWORD* attrId = reinterpret_cast<DWORD*>(baton->input);
+
+    std::cout << "Requesting attribute " << *attrId << std::endl;
+
+    LONG result = SCARD_S_SUCCESS;
+    CardReader* obj = baton->reader;
+
+    uv_mutex_lock(&obj->m_mutex);
+
+    if (obj->m_card_handle) {
+        DWORD dwAttrLen;
+
+        result = SCardGetAttrib(obj->m_card_handle, *attrId, NULL, &dwAttrLen);
+
+        if (result == SCARD_S_SUCCESS) {
+            // FIXME: WHO RELEASES THIS MEMORY?
+            BYTE *buffer = new BYTE[dwAttrLen];
+
+            result = SCardGetAttrib(obj->m_card_handle, *attrId, buffer, &dwAttrLen);
+
+            // FIXME: return result
+            std::cout << "result: " << result << "\n";
+            std::cout << "buffer Len: " << dwAttrLen << "\n";
+        }
+    } else {
+        std::cout << "No card handle" << std::endl;
+    }
+
+    uv_mutex_unlock(&obj->m_mutex);
+
+    baton->result = reinterpret_cast<void*>(new LONG(result));
+}
+
+void CardReader::AfterGetAttrib(uv_work_t* req, int status) {
+
+    Nan::HandleScope scope;
+    Baton* baton = static_cast<Baton*>(req->data);
+    LONG* result = reinterpret_cast<LONG*>(baton->result);
+
+    if (*result) {
+        Local<Value> err = Nan::Error(error_msg("SCardGetAttrib", *result).c_str());
+
+        const unsigned argc = 1;
+        Local<Value> argv[argc] = { err };
+        Nan::Callback(Nan::New(baton->callback)).Call(argc, argv);
+    } else {
+        const unsigned argc = 1;
+        Local<Value> argv[argc] = {
+            Nan::Null() // FIXME: value goes here
+        };
+
+        Nan::Callback(Nan::New(baton->callback)).Call(argc, argv);
+    }
+
+    baton->callback.Reset();
+    DWORD* attrId = reinterpret_cast<DWORD*>(baton->input);
+    delete attrId;
     delete result;
     delete baton;
 }
