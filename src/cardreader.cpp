@@ -1,5 +1,3 @@
-#include <iostream>
-
 #include "cardreader.h"
 #include "common.h"
 
@@ -62,7 +60,11 @@ void CardReader::init(Local<Object> target) {
     Nan::SetPrototypeTemplate(tpl, "SCARD_EJECT_CARD", Nan::New(SCARD_EJECT_CARD));
 
     // Attributes
+    // For some reason these values are't in the macOS pcsclite
+    Nan::SetPrototypeTemplate(tpl, "SCARD_ATTR_VENDOR_NAME", Nan::New(SCARD_ATTR_VALUE(1, 0x0100)));
+    Nan::SetPrototypeTemplate(tpl, "SCARD_ATTR_VENDOR_IFD_SERIAL_NO", Nan::New(SCARD_ATTR_VALUE(1, 0x0103)));
     Nan::SetPrototypeTemplate(tpl, "SCARD_ATTR_CHANNEL_ID", Nan::New(SCARD_ATTR_VALUE(2, 0x0110)));
+    Nan::SetPrototypeTemplate(tpl, "SCARD_ATTR_DEVICE_FRIENDLY_NAME", Nan::New(SCARD_ATTR_VALUE(0x7fff, 0x0003)));
 
     Local <Context> context = Nan::GetCurrentContext();
 
@@ -218,8 +220,6 @@ NAN_METHOD(CardReader::GetAttrib) {
 
     DWORD attrId = info[0]->Uint32Value(context).FromJust();
     Local<Function> cb = Local<Function>::Cast(info[1]);
-
-    std::cout << "Requesting attribute " << attrId << std::endl;
 
     Baton* baton = new Baton();
     baton->input = reinterpret_cast<void*>(new DWORD(attrId));
@@ -601,63 +601,58 @@ void CardReader::DoGetAttrib(uv_work_t* req) {
 
     Baton* baton = static_cast<Baton*>(req->data);
     DWORD* attrId = reinterpret_cast<DWORD*>(baton->input);
-
-    std::cout << "Requesting attribute " << *attrId << std::endl;
-
-    LONG result = SCARD_S_SUCCESS;
     CardReader* obj = baton->reader;
+
+    TransmitResult *tr = new TransmitResult();
+    tr->result = SCARD_E_INVALID_HANDLE;
 
     uv_mutex_lock(&obj->m_mutex);
 
     if (obj->m_card_handle) {
-        DWORD dwAttrLen;
+        // Measure the required length of the buffer
+        tr->result = SCardGetAttrib(obj->m_card_handle, *attrId,
+                                    NULL, &tr->len);
 
-        result = SCardGetAttrib(obj->m_card_handle, *attrId, NULL, &dwAttrLen);
-
-        if (result == SCARD_S_SUCCESS) {
-            // FIXME: WHO RELEASES THIS MEMORY?
-            BYTE *buffer = new BYTE[dwAttrLen];
-
-            result = SCardGetAttrib(obj->m_card_handle, *attrId, buffer, &dwAttrLen);
-
-            // FIXME: return result
-            std::cout << "result: " << result << "\n";
-            std::cout << "buffer Len: " << dwAttrLen << "\n";
+        if (tr->result == SCARD_S_SUCCESS) {
+            // Allocate a buffer and collect it
+            tr->data = new unsigned char[tr->len];
+            tr->result = SCardGetAttrib(obj->m_card_handle, *attrId,
+                                        tr->data, &tr->len);
         }
-    } else {
-        std::cout << "No card handle" << std::endl;
     }
 
     uv_mutex_unlock(&obj->m_mutex);
 
-    baton->result = reinterpret_cast<void*>(new LONG(result));
+    baton->result = tr;
 }
 
 void CardReader::AfterGetAttrib(uv_work_t* req, int status) {
 
     Nan::HandleScope scope;
     Baton* baton = static_cast<Baton*>(req->data);
-    LONG* result = reinterpret_cast<LONG*>(baton->result);
+    DWORD* attrId = reinterpret_cast<DWORD*>(baton->input);
+    TransmitResult* tr = reinterpret_cast<TransmitResult*>(baton->result);
 
-    if (*result) {
-        Local<Value> err = Nan::Error(error_msg("SCardGetAttrib", *result).c_str());
+    if (tr->result) {
+        Local<Value> err = Nan::Error(error_msg("SCardGetAttrib", tr->result).c_str());
 
         const unsigned argc = 1;
         Local<Value> argv[argc] = { err };
         Nan::Callback(Nan::New(baton->callback)).Call(argc, argv);
     } else {
-        const unsigned argc = 1;
+        const unsigned argc = 2;
         Local<Value> argv[argc] = {
-            Nan::Null() // FIXME: value goes here
+            Nan::Null(),
+            Nan::CopyBuffer(reinterpret_cast<char*>(tr->data), tr->len).ToLocalChecked(),
         };
 
         Nan::Callback(Nan::New(baton->callback)).Call(argc, argv);
     }
 
     baton->callback.Reset();
-    DWORD* attrId = reinterpret_cast<DWORD*>(baton->input);
     delete attrId;
-    delete result;
+    delete [] tr->data;
+    delete tr;
     delete baton;
 }
 
