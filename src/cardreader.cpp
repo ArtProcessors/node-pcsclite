@@ -61,10 +61,10 @@ void CardReader::init(Local<Object> target) {
 
     // Attributes
     // For some reason these values are't in the macOS pcsclite
-    Nan::SetPrototypeTemplate(tpl, "SCARD_ATTR_VENDOR_NAME", Nan::New(SCARD_ATTR_VALUE(1, 0x0100)));
-    Nan::SetPrototypeTemplate(tpl, "SCARD_ATTR_VENDOR_IFD_SERIAL_NO", Nan::New(SCARD_ATTR_VALUE(1, 0x0103)));
-    Nan::SetPrototypeTemplate(tpl, "SCARD_ATTR_CHANNEL_ID", Nan::New(SCARD_ATTR_VALUE(2, 0x0110)));
-    Nan::SetPrototypeTemplate(tpl, "SCARD_ATTR_DEVICE_FRIENDLY_NAME", Nan::New(SCARD_ATTR_VALUE(0x7fff, 0x0003)));
+    Nan::SetPrototypeTemplate(tpl, "SCARD_ATTR_VENDOR_NAME", Nan::New<Number>(SCARD_ATTR_VALUE(1, 0x0100)));
+    Nan::SetPrototypeTemplate(tpl, "SCARD_ATTR_VENDOR_IFD_SERIAL_NO", Nan::New<Number>(SCARD_ATTR_VALUE(1, 0x0103)));
+    Nan::SetPrototypeTemplate(tpl, "SCARD_ATTR_CHANNEL_ID", Nan::New<Number>(SCARD_ATTR_VALUE(2, 0x0110)));
+    Nan::SetPrototypeTemplate(tpl, "SCARD_ATTR_DEVICE_FRIENDLY_NAME", Nan::New<Number>(SCARD_ATTR_VALUE(0x7fff, 0x0003)));
 
     Local <Context> context = Nan::GetCurrentContext();
 
