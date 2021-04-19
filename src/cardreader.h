@@ -20,6 +20,10 @@
 #define IOCTL_CCID_ESCAPE (0x42000000 + 1)
 #endif
 
+#ifndef SCARD_ATTR_VALUE
+#define SCARD_ATTR_VALUE(Class, Tag)   ((((ULONG)(Class)) << 16) | ((ULONG)(Tag)))
+#endif
+
 static Nan::Persistent<v8::String> name_symbol;
 static Nan::Persistent<v8::String> connected_symbol;
 
@@ -103,6 +107,7 @@ class CardReader: public Nan::ObjectWrap {
         static NAN_METHOD(GetStatus);
         static NAN_METHOD(Connect);
         static NAN_METHOD(Disconnect);
+        static NAN_METHOD(GetAttrib);
         static NAN_METHOD(Transmit);
         static NAN_METHOD(Control);
         static NAN_METHOD(Close);
@@ -111,12 +116,14 @@ class CardReader: public Nan::ObjectWrap {
         static void HandlerFunction(void* arg);
         static void DoConnect(uv_work_t* req);
         static void DoDisconnect(uv_work_t* req);
+        static void DoGetAttrib(uv_work_t* req);
         static void DoTransmit(uv_work_t* req);
         static void DoControl(uv_work_t* req);
         static void CloseCallback(uv_handle_t *handle);
 
         static void AfterConnect(uv_work_t* req, int status);
         static void AfterDisconnect(uv_work_t* req, int status);
+        static void AfterGetAttrib(uv_work_t* req, int status);
         static void AfterTransmit(uv_work_t* req, int status);
         static void AfterControl(uv_work_t* req, int status);
 
